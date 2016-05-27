@@ -27,6 +27,7 @@ Commands:
  words              Print the number of words in all unread articles.
  authenticate       Authenticate and store credentials in C<~/.pocket>.
                     (all commands will do this automatically)
+ local <path>       Download links to articles on Pocket to the local path.
 
 Example usage:
 
@@ -119,6 +120,12 @@ Unmarks C<url> as a favorite.
 =head2 delete <url>
 
 Deletes C<url> from your list and/or archive entirely.
+
+=head2 local <path>
+
+Download articles to the local path and store as C<pocket_id.url>,
+which can be double-clicked on Windows and MacOS X to display the
+URL in a browser. Uses the same options as C<list>.
 
 =cut
 

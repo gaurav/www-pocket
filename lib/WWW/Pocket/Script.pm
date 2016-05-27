@@ -204,6 +204,122 @@ sub favorites {
     print "$_\n" for $self->_retrieve_urls(%params);
 }
 
+# Download a local copy of all the URLs on Pocket.
+sub local {
+    my $self = shift;
+    my @argv = @_;
+
+    # Local path provided?
+    my $output_path = shift @argv;
+    unless (-d $output_path and -w $output_path) {
+        print STDERR "Could not write to '$output_path', not a writeable directory.\n";
+        $output_path = undef;
+    }
+    print STDERR "Writing output to '$output_path'.\n" if $output_path;
+
+    my ($params) = $self->_parse_retrieve_options(@argv);
+    my %params = (
+        $self->_default_search_params,
+        # detailType => 'complete', -- only if you need tags!
+        %$params,
+    );
+
+    my %item_counts;
+    foreach my $item ($self->_retrieve_data(%params)) {
+        my $item_id = $item->{'item_id'};
+
+        # For each item, figure out which folders it should go into.
+        my @subfolders = ('all');
+
+        # Status: 'list', 'archive', 'to_be_deleted'
+        push @subfolders, {
+            '0' => 'list',
+            '1' => 'archived',
+            '2' => 'to_be_deleted'
+        }->{$item->{'status'}};
+
+        if($item->{'time_read'} eq '0') {
+            push @subfolders, 'unread';
+        } else {
+            push @subfolders, 'read';
+        }
+
+        # Video: 'has_video', 'is_video'
+        if($item->{'has_video'} eq '1') {
+            push @subfolders, 'has_video';
+        } elsif($item->{'has_video'} eq '2') {
+            push @subfolders, 'is_video';
+        }
+
+        # Group by size.
+        my $word_count = $item->{'word_count'};
+        if($word_count < 500) {
+            push @subfolders, 'tiny';
+        } elsif($word_count < 2000) {
+            push @subfolders, 'small';
+        } elsif($word_count < 5000) {
+            push @subfolders, 'short';
+        } elsif($word_count < 10_000) {
+            push @subfolders, 'normal';
+        } elsif($word_count < 15_000) {
+            push @subfolders, 'large';    
+        } else {
+            push @subfolders, 'huge';
+        }
+
+        # Sort by date.
+        my $time_added = $item->{'time_added'};
+        my $time_path = 'by_date';
+        {
+            my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime($time_added);
+            $year += 1900;
+            my @months = qw(january february march april may june july august september october november december);
+            my $month = $months[$mon];
+            $time_path .= "/$year/$month";
+
+            # We need to make the folder here, because mkdir isn't recursive.
+            mkdir "$output_path/by_date" unless -d "$output_path/by_date";
+            mkdir "$output_path/by_date/$year" unless -d "$output_path/by_date/$year";
+        }
+        push @subfolders, $time_path;
+
+        foreach my $subfolder (@subfolders) {
+            $item_counts{$subfolder} = 0 if not exists $item_counts{$subfolder};
+            $item_counts{$subfolder}++;
+
+            if ($output_path) {
+                my $title = $item->{'resolved_title'};
+                $title =~ s/[^a-zA-Z]/_/g;
+                $title =~ s/^\_*(.*)\_*$/$1/;
+                # Truncate to 231 characters (leaving 17 letters for the item ID + 3 letters for ' - ' + 4 letters for '.url')
+                $title = substr($title, 0, 231);
+
+                unless (-d "$output_path/$subfolder") {
+                    mkdir("$output_path/$subfolder") or die "Could not create '$output_path/$subfolder': $!";
+                }
+                open(my $fh, ">:utf8", "$output_path/$subfolder/$item_id - $title.url") 
+                    or die "Could not open '$output_path/$subfolder/$item_id - $title.url': $!";
+                print $fh "[InternetShortcut]\nURL=http://getpocket.com/a/read/$item_id\n";
+                close($fh);
+            }
+        }
+
+        print "https://getpocket.com/a/read/$item_id to be saved to folders: " . join(', ', @subfolders) . "\n"
+            unless $output_path;
+    }
+    # print "https://getpocket.com/a/read/$_\n" for $self->_retrieve_field('item_id', %params);
+
+    print "\nNumber of items in each category:\n";
+    foreach my $category (sort { $item_counts{$b} <=> $item_counts{$a} } keys %item_counts) {
+        print sprintf " - %s: %d (%.2f%%)\n", (
+            $category,
+            $item_counts{$category},
+            $item_counts{$category}/$item_counts{'all'} * 100
+        );
+    }
+    print "\n";
+}
+
 sub retrieve_raw {
     my $self = shift;
     my @argv = @_;
@@ -296,6 +412,20 @@ sub _retrieve_field {
         $a->{sort_id} <=> $b->{sort_id}
     } values %$list;
 }
+
+# Retrieve all the data (identical to _retrieve_field, but without the mapping).
+sub _retrieve_data {
+    my $self = shift;
+    my (%params) = @_;
+
+    my $response = $self->pocket->retrieve(%params);
+    my $list = $response->{list};
+    return unless ref($list) && ref($list) eq 'HASH';
+
+    return values %$list;
+}
+
+
 
 sub _pretty_print {
     my $self = shift;
