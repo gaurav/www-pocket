@@ -255,19 +255,19 @@ sub local {
         my $word_count = $item->{'word_count'};
         if($word_count < 500) {
             push @subfolders, 'tiny';
-        } elsif($word_count < 2000) {
+        } elsif($word_count < 1000) {
             push @subfolders, 'small';
-        } elsif($word_count < 5000) {
+        } elsif($word_count < 2000) {
             push @subfolders, 'short';
-        } elsif($word_count < 10_000) {
+        } elsif($word_count < 5000) {
             push @subfolders, 'normal';
-        } elsif($word_count < 15_000) {
+        } elsif($word_count < 7500) {
             push @subfolders, 'large';    
         } else {
             push @subfolders, 'huge';
         }
 
-        # Sort by date.
+        # Group by date.
         my $time_added = $item->{'time_added'};
         my $time_path = 'by_date';
         {
@@ -283,6 +283,16 @@ sub local {
         }
         push @subfolders, $time_path;
 
+        # Group by server name.
+        my $resolved_url = $item->{'resolved_url'};
+        if($resolved_url) {
+            my $uri = URI->new($resolved_url);
+            my $hostname = $uri->canonical->host;
+            mkdir("$output_path/by_host") unless -d "$output_path/by_host";
+            push @subfolders, "by_host/$hostname";
+        }
+
+        # Write out .url files.
         foreach my $subfolder (@subfolders) {
             $item_counts{$subfolder} = 0 if not exists $item_counts{$subfolder};
             $item_counts{$subfolder}++;
