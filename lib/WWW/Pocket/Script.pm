@@ -289,7 +289,7 @@ sub local {
 
             if ($output_path) {
                 my $title = $item->{'resolved_title'};
-                $title =~ s/[^a-zA-Z]/_/g;
+                $title =~ s/[^a-zA-Z0-9 ]/_/g;
                 $title =~ s/^\_*(.*)\_*$/$1/;
                 # Truncate to 231 characters (leaving 17 letters for the item ID + 3 letters for ' - ' + 4 letters for '.url')
                 $title = substr($title, 0, 231);
